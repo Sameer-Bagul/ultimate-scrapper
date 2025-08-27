@@ -82,9 +82,12 @@ export class DatabaseStorage implements IStorage {
     const [createdJob] = await db
       .insert(scrapingJobs)
       .values({
-        ...job,
         userId,
-      })
+        name: job.name,
+        urls: job.urls,
+        adapterType: job.adapterType,
+        config: job.config || {},
+      } as any)
       .returning();
     return createdJob;
   }
@@ -128,7 +131,7 @@ export class DatabaseStorage implements IStorage {
 
   // Scraped data operations
   async addScrapedData(data: InsertScrapedData): Promise<ScrapedData> {
-    const [result] = await db.insert(scrapedData).values(data).returning();
+    const [result] = await db.insert(scrapedData).values(data as any).returning();
     return result;
   }
 

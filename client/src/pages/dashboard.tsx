@@ -32,7 +32,12 @@ export default function Dashboard() {
     }
   }, [isAuthenticated, isLoading, toast]);
 
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading } = useQuery<{
+    activeJobs: number;
+    totalRecords: number;
+    successRate: number;
+    creditsUsed: number;
+  }>({
     queryKey: ["/api/dashboard/stats"],
     refetchInterval: 30000, // Refresh every 30 seconds
   });

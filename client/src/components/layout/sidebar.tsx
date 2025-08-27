@@ -25,7 +25,7 @@ const navigation = [
 ];
 
 export default function Sidebar() {
-  const { user } = useAuth();
+  const { user } = useAuth() as { user: any; };
   const [location] = useLocation();
 
   const getUserInitials = (user: any) => {

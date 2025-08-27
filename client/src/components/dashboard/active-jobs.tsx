@@ -12,7 +12,7 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 export default function ActiveJobs() {
   const { toast } = useToast();
 
-  const { data: jobs, isLoading, refetch } = useQuery({
+  const { data: jobs, isLoading, refetch } = useQuery<any[]>({
     queryKey: ["/api/scraping-jobs"],
     refetchInterval: 5000, // Refresh every 5 seconds
   });

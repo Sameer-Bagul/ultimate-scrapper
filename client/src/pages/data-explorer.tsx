@@ -34,12 +34,12 @@ export default function DataExplorer() {
     }
   }, [isAuthenticated, isLoading, toast]);
 
-  const { data: scrapedData, isLoading: dataLoading } = useQuery({
+  const { data: scrapedData, isLoading: dataLoading } = useQuery<any[]>({
     queryKey: ["/api/scraped-data", { q: searchQuery, limit, offset: (currentPage - 1) * limit }],
     enabled: !!isAuthenticated,
   });
 
-  const { data: totalCount } = useQuery({
+  const { data: totalCount } = useQuery<{ count: number }>({
     queryKey: ["/api/scraped-data/count"],
     enabled: !!isAuthenticated,
   });

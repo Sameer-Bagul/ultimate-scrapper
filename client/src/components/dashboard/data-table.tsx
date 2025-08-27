@@ -14,11 +14,11 @@ export default function DataTable() {
   const [currentPage, setCurrentPage] = useState(1);
   const limit = 10;
 
-  const { data: scrapedData, isLoading } = useQuery({
+  const { data: scrapedData, isLoading } = useQuery<any[]>({
     queryKey: ["/api/scraped-data", { q: searchQuery, limit, offset: (currentPage - 1) * limit }],
   });
 
-  const { data: totalCount } = useQuery({
+  const { data: totalCount } = useQuery<{ count: number }>({
     queryKey: ["/api/scraped-data/count"],
   });
 
