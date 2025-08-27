@@ -1,50 +1,46 @@
 import {
-  users,
-  scrapingJobs,
-  scrapedData,
-  domainAdapters,
-  jobLogs,
-  type User,
+  User,
+  ScrapingJob,
+  ScrapedData,
+  DomainAdapter,
+  JobLog,
+  type InsertUser,
   type UpsertUser,
   type InsertScrapingJob,
-  type ScrapingJob,
   type InsertScrapedData,
-  type ScrapedData,
   type InsertDomainAdapter,
-  type DomainAdapter,
-  type JobLog,
 } from "@shared/schema";
-import { db } from "./db";
-import { eq, desc, and, like, count } from "drizzle-orm";
+import { connectToDatabase } from "./db";
+import { nanoid } from "nanoid";
 
 export interface IStorage {
   // User operations (required for Replit Auth)
-  getUser(id: string): Promise<User | undefined>;
-  upsertUser(user: UpsertUser): Promise<User>;
+  getUser(id: string): Promise<any | undefined>;
+  upsertUser(user: UpsertUser): Promise<any>;
 
   // Scraping job operations
-  createScrapingJob(userId: string, job: InsertScrapingJob): Promise<ScrapingJob>;
-  getScrapingJob(id: string): Promise<ScrapingJob | undefined>;
-  getUserScrapingJobs(userId: string, limit?: number): Promise<ScrapingJob[]>;
+  createScrapingJob(userId: string, job: InsertScrapingJob): Promise<any>;
+  getScrapingJob(id: string): Promise<any | undefined>;
+  getUserScrapingJobs(userId: string, limit?: number): Promise<any[]>;
   updateScrapingJobStatus(id: string, status: string, progress?: number): Promise<void>;
   updateScrapingJobMetrics(id: string, data: { recordsFound?: number; totalPages?: number; completedAt?: Date }): Promise<void>;
 
   // Scraped data operations
-  addScrapedData(data: InsertScrapedData): Promise<ScrapedData>;
-  getJobScrapedData(jobId: string, limit?: number, offset?: number): Promise<ScrapedData[]>;
-  getUserScrapedData(userId: string, limit?: number, offset?: number): Promise<ScrapedData[]>;
-  searchScrapedData(userId: string, query: string, limit?: number): Promise<ScrapedData[]>;
+  addScrapedData(data: InsertScrapedData): Promise<any>;
+  getJobScrapedData(jobId: string, limit?: number, offset?: number): Promise<any[]>;
+  getUserScrapedData(userId: string, limit?: number, offset?: number): Promise<any[]>;
+  searchScrapedData(userId: string, query: string, limit?: number): Promise<any[]>;
   getScrapedDataCount(userId: string): Promise<number>;
 
   // Domain adapter operations
-  createDomainAdapter(userId: string, adapter: InsertDomainAdapter): Promise<DomainAdapter>;
-  getUserDomainAdapters(userId: string): Promise<DomainAdapter[]>;
-  getPublicDomainAdapters(): Promise<DomainAdapter[]>;
-  getDomainAdapterByDomain(domain: string): Promise<DomainAdapter | undefined>;
+  createDomainAdapter(userId: string, adapter: InsertDomainAdapter): Promise<any>;
+  getUserDomainAdapters(userId: string): Promise<any[]>;
+  getPublicDomainAdapters(): Promise<any[]>;
+  getDomainAdapterByDomain(domain: string): Promise<any | undefined>;
 
   // Job log operations
   addJobLog(jobId: string, level: string, message: string, metadata?: any): Promise<void>;
-  getJobLogs(jobId: string): Promise<JobLog[]>;
+  getJobLogs(jobId: string): Promise<any[]>;
 
   // Dashboard stats
   getUserStats(userId: string): Promise<{
@@ -56,197 +52,195 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  constructor() {
+    connectToDatabase();
+  }
+
   // User operations
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+  async getUser(id: string): Promise<any | undefined> {
+    await connectToDatabase();
+    const user = await User.findOne({ id }).lean();
     return user;
   }
 
-  async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+  async upsertUser(userData: UpsertUser): Promise<any> {
+    await connectToDatabase();
+    const user = await User.findOneAndUpdate(
+      { id: userData.id },
+      { ...userData, updatedAt: new Date() },
+      { upsert: true, new: true }
+    ).lean();
     return user;
   }
 
   // Scraping job operations
-  async createScrapingJob(userId: string, job: InsertScrapingJob): Promise<ScrapingJob> {
-    const [createdJob] = await db
-      .insert(scrapingJobs)
-      .values({
-        userId,
-        name: job.name,
-        urls: job.urls,
-        adapterType: job.adapterType,
-        config: job.config || {},
-      } as any)
-      .returning();
-    return createdJob;
+  async createScrapingJob(userId: string, job: InsertScrapingJob): Promise<any> {
+    await connectToDatabase();
+    const scrapingJob = new ScrapingJob({
+      id: nanoid(),
+      userId,
+      name: job.name,
+      urls: job.urls,
+      adapterType: job.adapterType,
+      config: job.config || {},
+      status: 'queued',
+      progress: 0,
+      totalPages: 0,
+      recordsFound: 0,
+    });
+    await scrapingJob.save();
+    return scrapingJob.toObject();
   }
 
-  async getScrapingJob(id: string): Promise<ScrapingJob | undefined> {
-    const [job] = await db.select().from(scrapingJobs).where(eq(scrapingJobs.id, id));
+  async getScrapingJob(id: string): Promise<any | undefined> {
+    await connectToDatabase();
+    const job = await ScrapingJob.findOne({ id }).lean();
     return job;
   }
 
-  async getUserScrapingJobs(userId: string, limit = 50): Promise<ScrapingJob[]> {
-    return await db
-      .select()
-      .from(scrapingJobs)
-      .where(eq(scrapingJobs.userId, userId))
-      .orderBy(desc(scrapingJobs.createdAt))
-      .limit(limit);
+  async getUserScrapingJobs(userId: string, limit = 50): Promise<any[]> {
+    await connectToDatabase();
+    const jobs = await ScrapingJob.find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    return jobs;
   }
 
   async updateScrapingJobStatus(id: string, status: string, progress?: number): Promise<void> {
+    await connectToDatabase();
     const updateData: any = { status, updatedAt: new Date() };
     if (progress !== undefined) updateData.progress = progress;
-    if (status === 'running' && !await this.getScrapingJob(id).then(job => job?.startedAt)) {
+    
+    const currentJob = await ScrapingJob.findOne({ id });
+    if (status === 'running' && !currentJob?.startedAt) {
       updateData.startedAt = new Date();
     }
     if (status === 'completed' || status === 'failed') {
       updateData.completedAt = new Date();
     }
 
-    await db
-      .update(scrapingJobs)
-      .set(updateData)
-      .where(eq(scrapingJobs.id, id));
+    await ScrapingJob.updateOne({ id }, updateData);
   }
 
   async updateScrapingJobMetrics(id: string, data: { recordsFound?: number; totalPages?: number; completedAt?: Date }): Promise<void> {
-    await db
-      .update(scrapingJobs)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(scrapingJobs.id, id));
+    await connectToDatabase();
+    await ScrapingJob.updateOne({ id }, { ...data, updatedAt: new Date() });
   }
 
   // Scraped data operations
-  async addScrapedData(data: InsertScrapedData): Promise<ScrapedData> {
-    const [result] = await db.insert(scrapedData).values(data as any).returning();
-    return result;
+  async addScrapedData(data: InsertScrapedData): Promise<any> {
+    await connectToDatabase();
+    const scrapedData = new ScrapedData({
+      id: nanoid(),
+      ...data,
+    });
+    await scrapedData.save();
+    return scrapedData.toObject();
   }
 
-  async getJobScrapedData(jobId: string, limit = 100, offset = 0): Promise<ScrapedData[]> {
-    return await db
-      .select()
-      .from(scrapedData)
-      .where(eq(scrapedData.jobId, jobId))
-      .orderBy(desc(scrapedData.createdAt))
+  async getJobScrapedData(jobId: string, limit = 100, offset = 0): Promise<any[]> {
+    await connectToDatabase();
+    const data = await ScrapedData.find({ jobId })
+      .sort({ createdAt: -1 })
       .limit(limit)
-      .offset(offset);
+      .skip(offset)
+      .lean();
+    return data;
   }
 
-  async getUserScrapedData(userId: string, limit = 100, offset = 0): Promise<ScrapedData[]> {
-    return await db
-      .select({
-        id: scrapedData.id,
-        jobId: scrapedData.jobId,
-        sourceUrl: scrapedData.sourceUrl,
-        dataType: scrapedData.dataType,
-        extractedData: scrapedData.extractedData,
-        rawHtml: scrapedData.rawHtml,
-        createdAt: scrapedData.createdAt,
-      })
-      .from(scrapedData)
-      .innerJoin(scrapingJobs, eq(scrapedData.jobId, scrapingJobs.id))
-      .where(eq(scrapingJobs.userId, userId))
-      .orderBy(desc(scrapedData.createdAt))
+  async getUserScrapedData(userId: string, limit = 100, offset = 0): Promise<any[]> {
+    await connectToDatabase();
+    // First get user's job IDs
+    const userJobs = await ScrapingJob.find({ userId }).select('id').lean();
+    const jobIds = userJobs.map(job => job.id);
+    
+    const data = await ScrapedData.find({ jobId: { $in: jobIds } })
+      .sort({ createdAt: -1 })
       .limit(limit)
-      .offset(offset);
+      .skip(offset)
+      .lean();
+    return data;
   }
 
-  async searchScrapedData(userId: string, query: string, limit = 100): Promise<ScrapedData[]> {
-    return await db
-      .select({
-        id: scrapedData.id,
-        jobId: scrapedData.jobId,
-        sourceUrl: scrapedData.sourceUrl,
-        dataType: scrapedData.dataType,
-        extractedData: scrapedData.extractedData,
-        rawHtml: scrapedData.rawHtml,
-        createdAt: scrapedData.createdAt,
-      })
-      .from(scrapedData)
-      .innerJoin(scrapingJobs, eq(scrapedData.jobId, scrapingJobs.id))
-      .where(
-        and(
-          eq(scrapingJobs.userId, userId),
-          like(scrapedData.sourceUrl, `%${query}%`)
-        )
-      )
-      .orderBy(desc(scrapedData.createdAt))
-      .limit(limit);
+  async searchScrapedData(userId: string, query: string, limit = 100): Promise<any[]> {
+    await connectToDatabase();
+    // First get user's job IDs
+    const userJobs = await ScrapingJob.find({ userId }).select('id').lean();
+    const jobIds = userJobs.map(job => job.id);
+    
+    const data = await ScrapedData.find({ 
+      jobId: { $in: jobIds },
+      sourceUrl: { $regex: query, $options: 'i' }
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    return data;
   }
 
   async getScrapedDataCount(userId: string): Promise<number> {
-    const [result] = await db
-      .select({ count: count() })
-      .from(scrapedData)
-      .innerJoin(scrapingJobs, eq(scrapedData.jobId, scrapingJobs.id))
-      .where(eq(scrapingJobs.userId, userId));
-    return result.count;
+    await connectToDatabase();
+    // First get user's job IDs
+    const userJobs = await ScrapingJob.find({ userId }).select('id').lean();
+    const jobIds = userJobs.map(job => job.id);
+    
+    const count = await ScrapedData.countDocuments({ jobId: { $in: jobIds } });
+    return count;
   }
 
   // Domain adapter operations
-  async createDomainAdapter(userId: string, adapter: InsertDomainAdapter): Promise<DomainAdapter> {
-    const [result] = await db
-      .insert(domainAdapters)
-      .values({ ...adapter, userId })
-      .returning();
-    return result;
+  async createDomainAdapter(userId: string, adapter: InsertDomainAdapter): Promise<any> {
+    await connectToDatabase();
+    const domainAdapter = new DomainAdapter({
+      id: nanoid(),
+      ...adapter,
+    });
+    await domainAdapter.save();
+    return domainAdapter.toObject();
   }
 
-  async getUserDomainAdapters(userId: string): Promise<DomainAdapter[]> {
-    return await db
-      .select()
-      .from(domainAdapters)
-      .where(eq(domainAdapters.userId, userId))
-      .orderBy(desc(domainAdapters.createdAt));
+  async getUserDomainAdapters(userId: string): Promise<any[]> {
+    await connectToDatabase();
+    // For now, return empty array since we don't have userId in domain adapters
+    return [];
   }
 
-  async getPublicDomainAdapters(): Promise<DomainAdapter[]> {
-    return await db
-      .select()
-      .from(domainAdapters)
-      .where(eq(domainAdapters.isPublic, true))
-      .orderBy(desc(domainAdapters.createdAt));
+  async getPublicDomainAdapters(): Promise<any[]> {
+    await connectToDatabase();
+    const adapters = await DomainAdapter.find({ isActive: true })
+      .sort({ createdAt: -1 })
+      .lean();
+    return adapters;
   }
 
-  async getDomainAdapterByDomain(domain: string): Promise<DomainAdapter | undefined> {
-    const [adapter] = await db
-      .select()
-      .from(domainAdapters)
-      .where(eq(domainAdapters.domain, domain))
-      .orderBy(desc(domainAdapters.createdAt))
-      .limit(1);
+  async getDomainAdapterByDomain(domain: string): Promise<any | undefined> {
+    await connectToDatabase();
+    const adapter = await DomainAdapter.findOne({ domain })
+      .sort({ createdAt: -1 })
+      .lean();
     return adapter;
   }
 
   // Job log operations
   async addJobLog(jobId: string, level: string, message: string, metadata?: any): Promise<void> {
-    await db.insert(jobLogs).values({
+    await connectToDatabase();
+    const jobLog = new JobLog({
+      id: nanoid(),
       jobId,
       level,
       message,
       metadata,
     });
+    await jobLog.save();
   }
 
-  async getJobLogs(jobId: string): Promise<JobLog[]> {
-    return await db
-      .select()
-      .from(jobLogs)
-      .where(eq(jobLogs.jobId, jobId))
-      .orderBy(desc(jobLogs.createdAt));
+  async getJobLogs(jobId: string): Promise<any[]> {
+    await connectToDatabase();
+    const logs = await JobLog.find({ jobId })
+      .sort({ createdAt: -1 })
+      .lean();
+    return logs;
   }
 
   // Dashboard stats
@@ -256,49 +250,35 @@ export class DatabaseStorage implements IStorage {
     successRate: number;
     creditsUsed: number;
   }> {
+    await connectToDatabase();
+
     // Get active jobs count
-    const [activeJobsResult] = await db
-      .select({ count: count() })
-      .from(scrapingJobs)
-      .where(
-        and(
-          eq(scrapingJobs.userId, userId),
-          eq(scrapingJobs.status, 'running')
-        )
-      );
+    const activeJobs = await ScrapingJob.countDocuments({
+      userId,
+      status: 'running'
+    });
+
+    // Get user's job IDs
+    const userJobs = await ScrapingJob.find({ userId }).select('id').lean();
+    const jobIds = userJobs.map(job => job.id);
 
     // Get total records count
-    const [totalRecordsResult] = await db
-      .select({ count: count() })
-      .from(scrapedData)
-      .innerJoin(scrapingJobs, eq(scrapedData.jobId, scrapingJobs.id))
-      .where(eq(scrapingJobs.userId, userId));
+    const totalRecords = await ScrapedData.countDocuments({ jobId: { $in: jobIds } });
 
     // Get success rate (completed vs total jobs)
-    const [totalJobsResult] = await db
-      .select({ count: count() })
-      .from(scrapingJobs)
-      .where(eq(scrapingJobs.userId, userId));
+    const totalJobs = await ScrapingJob.countDocuments({ userId });
+    const completedJobs = await ScrapingJob.countDocuments({
+      userId,
+      status: 'completed'
+    });
 
-    const [completedJobsResult] = await db
-      .select({ count: count() })
-      .from(scrapingJobs)
-      .where(
-        and(
-          eq(scrapingJobs.userId, userId),
-          eq(scrapingJobs.status, 'completed')
-        )
-      );
-
-    const successRate = totalJobsResult.count > 0 
-      ? (completedJobsResult.count / totalJobsResult.count) * 100 
-      : 0;
+    const successRate = totalJobs > 0 ? (completedJobs / totalJobs) * 100 : 0;
 
     return {
-      activeJobs: activeJobsResult.count,
-      totalRecords: totalRecordsResult.count,
+      activeJobs,
+      totalRecords,
       successRate: Math.round(successRate * 10) / 10,
-      creditsUsed: totalRecordsResult.count, // Simple credit calculation
+      creditsUsed: totalRecords, // Simple credit calculation
     };
   }
 }
